@@ -1,7 +1,7 @@
 /**
  * DUAS CMS FRONTEND - PRODUCTION READY (V3 - Unified Tree View)
  */
-const DEPLOYMENT_ID = "AKfycbw-x3ZLNeU8Oyg54TZFdf_YmtIsRTiLLcXCmTcP--6O3QAY_5T2FLMvwqtSFMlFH3r5Uw";
+const DEPLOYMENT_ID = process.env.DEPLOYMENT_ID;
 const API_URL = `https://script.google.com/macros/s/${DEPLOYMENT_ID}/exec`;
 
 let DB = { categories: [], items: [], media: [] };
