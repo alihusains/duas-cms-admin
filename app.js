@@ -53,7 +53,7 @@ function renderCategories() {
     container.appendChild(buildNode(root));
   });
 
-  // Handle Unassigned Items (items with no valid category assigned)
+  // Handle Unassigned Items
   const allCategoryIds = (DB.categories || []).map(c => String(c.id));
   const unassignedItems = (DB.items || []).filter(item => {
     if (!item.categoryIds) return true;
@@ -63,7 +63,7 @@ function renderCategories() {
 
   if (unassignedItems.length > 0) {
     const orphanSection = document.createElement("div");
-    orphanSection.style.marginTop = "32px";
+    orphanSection.className = "orphan-section";
     orphanSection.innerHTML = `<h4 style="color: #ef4444; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
         <span class="icon">⚠️</span> Unassigned Items
       </h4>`;
@@ -77,30 +77,43 @@ function renderCategories() {
     new Sortable(orphanContainer, {
       animation: 150,
       handle: ".drag-handle",
-      onEnd: () => updateOrder("Items", orphanContainer)
+      onEnd: () => {
+        const ids = Array.from(orphanContainer.children).map(el => el.dataset.id);
+        updateOrder("Items", ids);
+      }
     });
   }
 
   new Sortable(container, {
     animation: 150,
     handle: ".card-header",
-    onEnd: () => updateOrder("Categories", container)
+    onEnd: () => {
+      const ids = Array.from(container.children)
+        .filter(el => el.dataset.type === 'category')
+        .map(el => el.dataset.id);
+      updateOrder("Categories", ids);
+    }
   });
 }
 
 function buildNode(cat) {
   const div = document.createElement("div");
   div.className = "card category-node";
+  div.id = `cat-${cat.id}`;
   div.dataset.id = cat.id;
   div.dataset.type = "category";
+
+  const hasChildren = (DB.categories || []).some(c => String(c.parentId) === String(cat.id)) ||
+    (DB.items || []).some(i => String(i.categoryIds || '').split(',').includes(String(cat.id)));
 
   div.innerHTML = `
     <div class="card-header" style="border-left: 4px solid ${cat.color || '#3b82f6'}">
       <div class="title-area">
+        ${hasChildren ? `<span class="toggle-btn" onclick="toggleCollapse('${cat.id}')">▼</span>` : '<span class="toggle-btn" style="visibility:hidden">▼</span>'}
         <span class="drag-handle">☰</span>
         <span class="icon">${cat.icon ? '🖼️' : '📁'}</span>
         <div class="item-info">
-            <b>${cat.name}</b>
+            <b data-orig="${cat.name}">${cat.name}</b>
             <div style="display:flex; gap: 8px; align-items:center;">
                 ${cat.slug ? `<small class="slug-badge">${cat.slug}</small>` : ''}
                 ${cat.order ? `<small style="color:#64748b">Order: ${cat.order}</small>` : ''}
@@ -116,6 +129,7 @@ function buildNode(cat) {
 
   const childContainer = document.createElement("div");
   childContainer.className = "child-container";
+  childContainer.id = `children-${cat.id}`;
 
   // Render Sub-categories
   (DB.categories || [])
@@ -166,7 +180,7 @@ function buildItemNode(item) {
         <span class="drag-handle">⠿</span>
         ${item.thumbnail ? `<img src="${item.thumbnail}" class="mini-thumb" onerror="this.src='https://via.placeholder.com/32?text=?'">` : '<span class="icon">📄</span>'}
         <div class="item-info">
-          <b>${item.title}</b>
+          <b data-orig="${item.title}">${item.title}</b>
           <div class="item-meta">
             <span class="type-label">${item.type}</span>
             ${item.slug ? `<span class="slug-badge">${item.slug}</span>` : ''}
@@ -175,13 +189,34 @@ function buildItemNode(item) {
         </div>
       </div>
       <div class="actions">
+        <button onclick="toggleQuickPreview('${item.id}')" title="Quick Preview">👁️</button>
         <button onclick="editItem('${item.id}')">Edit</button>
         <button onclick="manageMedia('${item.id}')">Media</button>
         <button onclick="deleteItem('${item.id}')" class="btn-danger">Delete</button>
       </div>
     </div>
+    <div id="quick-preview-${item.id}" class="hidden" style="margin-top: 12px; padding: 12px; background: #0f172a; border-radius: 6px; border: 1px solid #334155;"></div>
   `;
   return div;
+}
+
+function toggleQuickPreview(itemId) {
+  const container = document.getElementById(`quick-preview-${itemId}`);
+  if (!container.classList.contains('hidden')) {
+    container.classList.add('hidden');
+    container.innerHTML = "";
+    return;
+  }
+
+  const item = DB.items.find(i => String(i.id) === String(itemId));
+  container.classList.remove('hidden');
+  container.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <small style="color:#94a3b8">Content Preview</small>
+            <button onclick="this.parentElement.parentElement.classList.add('hidden')" class="btn-secondary small" style="padding:2px 6px; width:auto; font-size:0.7rem; margin:0">Close</button>
+        </div>
+        ${getMediaPreviewHtml(item.content)}
+    `;
 }
 
 function renderItems() {
@@ -189,6 +224,20 @@ function renderItems() {
   const allCards = document.querySelectorAll(".card");
 
   allCards.forEach(card => {
+    // Reset highlights
+    const bTags = card.querySelectorAll("b");
+    bTags.forEach(b => {
+      const originalText = b.getAttribute("data-orig") || b.innerText;
+      if (!b.getAttribute("data-orig")) b.setAttribute("data-orig", originalText);
+
+      if (!query) {
+        b.innerText = originalText;
+      } else if (originalText.toLowerCase().includes(query)) {
+        const regex = new RegExp(`(${query})`, 'gi');
+        b.innerHTML = originalText.replace(regex, '<span class="search-highlight">$1</span>');
+      }
+    });
+
     if (!query) {
       card.style.display = "";
       card.style.opacity = "";
@@ -199,17 +248,123 @@ function renderItems() {
     if (text.includes(query)) {
       card.style.display = "";
       card.style.opacity = "1";
-      // Ensure parents are visible
-      let parent = card.parentElement.closest(".card");
+      // Ensure parents are visible and expanded
+      let parent = card.parentElement.closest(".category-node");
       while (parent) {
         parent.style.display = "";
         parent.style.opacity = "1";
-        parent = parent.parentElement.closest(".card");
+        parent.classList.remove("collapsed");
+        const toggle = parent.querySelector(".toggle-btn");
+        if (toggle) toggle.innerText = "▼";
+        parent = parent.parentElement.closest(".category-node");
       }
     } else {
       card.style.opacity = "0.3";
-      // We don't hide it completely to maintain tree structure but dim it
     }
+  });
+}
+
+function toggleCollapse(catId) {
+  const node = document.getElementById(`cat-${catId}`);
+  const toggle = node.querySelector(".toggle-btn");
+  const isCollapsed = node.classList.toggle("collapsed");
+  toggle.innerText = isCollapsed ? "▶" : "▼";
+}
+
+function updatePreview(val, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  if (!val || val.length < 5) {
+    container.innerHTML = '<small style="color:#64748b">No preview available</small>';
+    return;
+  }
+
+  let url = val.trim();
+  const lowVal = url.toLowerCase();
+
+  // Support Google Drive links
+  if (lowVal.includes('drive.google.com')) {
+    let fileId = "";
+    const parts = url.split('/');
+    const dIndex = parts.indexOf('d');
+    if (dIndex !== -1 && parts[dIndex + 1]) {
+      fileId = parts[dIndex + 1];
+    } else {
+      const idMatch = url.match(/id=([^&]+)/);
+      if (idMatch) fileId = idMatch[1];
+    }
+
+    if (fileId) {
+      if (containerId.toLowerCase().includes('thumb') || containerId.toLowerCase().includes('icon') || containerId.toLowerCase().includes('banner')) {
+        url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`;
+      } else {
+        url = `https://drive.google.com/uc?export=download&id=${fileId}`;
+      }
+    }
+  }
+
+  const isImage = url.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)$/i) ||
+    url.includes('images.unsplash.com') ||
+    url.includes('img.icons8.com') ||
+    url.includes('drive.google.com/thumbnail') ||
+    url.startsWith('data:image');
+
+  const isAudio = url.match(/\.(mp3|wav|ogg|m4a|aac)$/i) || url.includes('/uc?export=download');
+  const isVideo = url.match(/\.(mp4|webm|ogv|mov)$/i);
+  const isYoutube = lowVal.includes('youtube.com') || lowVal.includes('youtu.be');
+
+  if (isYoutube) {
+    let videoId = "";
+    if (lowVal.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
+    else if (lowVal.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+
+    if (videoId) {
+      container.innerHTML = `<iframe width="100%" height="180" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen style="border-radius:8px"></iframe>`;
+    } else {
+      container.innerHTML = '<small style="color:#38bdf8">YouTube Link detected</small>';
+    }
+  } else if (isImage) {
+    container.innerHTML = `<img src="${url}" onerror="this.parentElement.innerHTML='<small style="color:#ef4444">Invalid Image URL</small>'">`;
+  } else if (isAudio && !isImage) {
+    container.innerHTML = `<audio controls src="${url}" style="width:100%"></audio>`;
+  } else if (isVideo && !isImage) {
+    container.innerHTML = `<video controls src="${url}" style="max-width:100%; max-height:200px;"></video>`;
+  } else {
+    if (val.length > 100) {
+      container.innerHTML = `<div style="font-size:0.8rem; color:#94a3b8; text-align:left;"><b>Text Preview:</b><br>${val.substring(0, 150)}...</div>`;
+    } else {
+      container.innerHTML = '<small style="color:#64748b; word-break:break-all;">No visual preview for this content</small>';
+    }
+  }
+}
+
+function slugify(text) {
+  return text.toString().toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\-]+/g, '')
+    .replace(/\-\-+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '');
+}
+
+function handleAutoSlug(sourceId, targetId) {
+  const sourceEl = document.getElementById(sourceId);
+  const targetEl = document.getElementById(targetId);
+  if (!sourceEl || !targetEl) return;
+
+  sourceEl.addEventListener('input', () => {
+    if (!currentEditingId || !targetEl.value) {
+      targetEl.value = slugify(sourceEl.value);
+    }
+  });
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showToast("URL copied to clipboard", "success");
+  }).catch(err => {
+    showToast("Failed to copy", "error");
   });
 }
 
@@ -234,10 +389,14 @@ function showCategoryForm(cat) {
     </div>
     <label>Parent Category</label>
     <select id="parentId">${options}</select>
+
     <label>Icon URL</label>
-    <input id="icon" placeholder="https://..." value="${cat.icon || ''}">
+    <input id="icon" placeholder="https://..." value="${cat.icon || ''}" oninput="updatePreview(this.value, 'iconPreview')">
+    <div id="iconPreview" class="preview-box"></div>
+
     <label>Banner URL</label>
-    <input id="banner" placeholder="https://..." value="${cat.banner || ''}">
+    <input id="banner" placeholder="https://..." value="${cat.banner || ''}" oninput="updatePreview(this.value, 'bannerPreview')">
+    <div id="bannerPreview" class="preview-box"></div>
 
     <div style="display: flex; align-items: center; gap: 20px; margin-top: 10px;">
         <div>
@@ -255,6 +414,10 @@ function showCategoryForm(cat) {
       <button onclick="closeModal()" class="btn-secondary">Cancel</button>
     </div>
   `);
+
+  handleAutoSlug('name', 'slug');
+  updatePreview(cat.icon, 'iconPreview');
+  updatePreview(cat.banner, 'bannerPreview');
 }
 
 function submitCategory() {
@@ -295,12 +458,19 @@ function showItemForm(item) {
           <option value="book" ${item.type === 'book' ? 'selected' : ''}>Book</option>
         </select>
       </div>
-      <div><label>Thumbnail URL</label><input id="thumbnail" placeholder="https://..." value="${item.thumbnail || ''}"></div>
+      <div>
+        <label>Thumbnail URL</label>
+        <input id="thumbnail" placeholder="https://..." value="${item.thumbnail || ''}" oninput="updatePreview(this.value, 'itemThumbPreview')">
+      </div>
     </div>
+    <div id="itemThumbPreview" class="preview-box"></div>
+
     <label>Description</label>
     <textarea id="description" placeholder="Short description">${item.description || ''}</textarea>
-    <label>Main Content / Body</label>
-    <textarea id="content" placeholder="Full text content" style="height:150px">${item.content || ''}</textarea>
+
+    <label>Main Content / Body (URL or Text)</label>
+    <textarea id="content" placeholder="Full text content or media URL" style="height:100px" oninput="updatePreview(this.value, 'itemContentPreview')">${item.content || ''}</textarea>
+    <div id="itemContentPreview" class="preview-box"></div>
 
     <div class="category-select" style="max-height: 150px; overflow-y: auto; background: #0f172a; padding: 12px; border-radius: 6px; border: 1px solid #334155; margin-bottom: 16px;">
       <strong>Assign to Categories:</strong>
@@ -317,6 +487,10 @@ function showItemForm(item) {
       <button onclick="closeModal()" class="btn-secondary">Cancel</button>
     </div>
   `);
+
+  handleAutoSlug('title', 'slug');
+  updatePreview(item.thumbnail, 'itemThumbPreview');
+  updatePreview(item.content, 'itemContentPreview');
 }
 
 function submitItem() {
@@ -336,7 +510,6 @@ function submitItem() {
 }
 
 async function updateOrder(type, ids) {
-  const container = document.getElementById("toastContainer");
   showToast(`Updating order...`);
   try {
     const res = await fetch(API_URL, {
@@ -421,12 +594,74 @@ function editItem(id) {
   showItemForm(item);
 }
 
+function getMediaPreviewHtml(val) {
+  if (!val || val.length < 5) return "";
+  let url = val.trim();
+  const lowVal = url.toLowerCase();
+
+  if (lowVal.includes('drive.google.com')) {
+    let fileId = "";
+    const parts = url.split('/');
+    const dIndex = parts.indexOf('d');
+    if (dIndex !== -1 && parts[dIndex + 1]) {
+      fileId = parts[dIndex + 1];
+    } else {
+      const idMatch = url.match(/id=([^&]+)/);
+      if (idMatch) fileId = idMatch[1];
+    }
+    if (fileId) {
+      url = `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`;
+    }
+  }
+
+  const isImage = url.match(/\.(jpeg|jpg|gif|png|webp|svg|bmp)$/i) ||
+    url.includes('images.unsplash.com') ||
+    url.includes('img.icons8.com') ||
+    url.includes('drive.google.com/thumbnail');
+
+  const isAudio = url.match(/\.(mp3|wav|ogg|m4a|aac)$/i) || (lowVal.includes('drive.google.com') && !isImage);
+  const isVideo = url.match(/\.(mp4|webm|ogv|mov)$/i);
+  const isYoutube = lowVal.includes('youtube.com') || lowVal.includes('youtu.be');
+
+  if (isYoutube) {
+    let videoId = "";
+    if (lowVal.includes('v=')) videoId = url.split('v=')[1].split('&')[0];
+    else if (lowVal.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+    if (videoId) return `<iframe width="100%" height="120" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen style="border-radius:4px;"></iframe>`;
+    return '<small style="color:#38bdf8">YouTube Link</small>';
+  } else if (isImage) {
+    return `<img src="${url}" style="max-height:80px; border-radius:4px; display:block; margin: 0 auto;" onerror="this.style.display='none'">`;
+  } else if (isAudio) {
+    let audioUrl = url;
+    if (lowVal.includes('drive.google.com') && !url.includes('thumbnail')) {
+      const fileId = url.split('id=')[1] || url.split('/d/')[1].split('/')[0];
+      audioUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+    }
+    return `<audio controls src="${audioUrl}" style="height:32px; width:100%;"></audio>`;
+  } else if (isVideo) {
+    return `<video controls src="${url}" style="max-height:120px; width:100%; border-radius:4px;"></video>`;
+  }
+
+  if (val.length > 50) {
+    return `<div style="font-size:0.75rem; color:#94a3b8; word-break:break-all;">${val.substring(0, 80)}...</div>`;
+  }
+  return `<small style="color:#64748b; word-break:break-all;">${val}</small>`;
+}
+
 function manageMedia(itemId) {
   const media = DB.media.filter(m => String(m.itemId) === String(itemId));
   let list = media.map(m => `
-    <div class="media-item" style="display:flex; justify-content:space-between; align-items:center; background:#334155; padding:8px; border-radius:4px; margin-bottom:4px;">
-      <span>${m.label} (${m.format})</span>
-      <button onclick="deleteMedia('${m.id}', '${itemId}')" class="btn-danger small" style="width:auto">Delete</button>
+    <div class="media-item" style="display:flex; flex-direction:column; background:#334155; padding:12px; border-radius:4px; margin-bottom:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span><b>${m.label}</b> (${m.format})</span>
+        <div style="display:flex; gap:8px;">
+            <button onclick="copyToClipboard('${m.url}')" class="btn-secondary small" style="width:auto; margin:0; padding: 4px 8px;">Copy URL</button>
+            <button onclick="deleteMedia('${m.id}', '${itemId}')" class="btn-danger small" style="width:auto; margin:0; padding: 4px 8px;">Delete</button>
+        </div>
+      </div>
+      <div class="media-item-preview">
+        ${getMediaPreviewHtml(m.url)}
+      </div>
     </div>
   `).join("");
 
@@ -441,7 +676,8 @@ function manageMedia(itemId) {
     <label>Label</label>
     <input id="m_label" placeholder="e.g. High Quality">
     <label>URL</label>
-    <input id="m_url" placeholder="https://...">
+    <input id="m_url" placeholder="https://..." oninput="updatePreview(this.value, 'mediaAddPreview')">
+    <div id="mediaAddPreview" class="preview-box"></div>
     <label>Format</label>
     <select id="m_format">
       <option value="audio">Audio</option>
