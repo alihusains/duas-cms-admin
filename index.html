@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Duas CMS</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>Duas CMS</h2>
+  <button class="btn-primary" onclick="openCategoryModal()">+ New Category</button>
+  <button class="btn-primary" onclick="openItemModal()">+ New Item</button>
+  <hr style="width:100%; border:0; border-top:1px solid #334155; margin: 10px 0;">
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="Search items..." oninput="renderItems()">
+  </div>
+  <button onclick="refresh()">Refresh Data</button>
+</div>
+
+<div id="toastContainer" class="toast-container"></div>
+
+<div class="content">
+  <div class="panel" style="grid-column: span 2;">
+    <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #334155; padding-bottom: 12px;">
+      <h3 style="margin:0">Content Tree</h3>
+      <div id="stats" style="color: #94a3b8; font-size: 0.9rem;"></div>
+    </div>
+    <div id="categoryTree" class="scroll-area"></div>
+  </div>
+</div>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-body" id="modalBody"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
