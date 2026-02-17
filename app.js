@@ -1,7 +1,8 @@
 /**
  * DUAS CMS FRONTEND - PRODUCTION READY (V3 - Unified Tree View)
  */
-const DEPLOYMENT_ID = process.env.DEPLOYMENT_ID;
+const DEPLOYMENT_ID = "AKfycbw-x3ZLNeU8Oyg54TZFdf_YmtIsRTiLLcXCmTcP--6O3QAY_5T2FLMvwqtSFMlFH3r5Uw";
+
 const API_URL = `https://script.google.com/macros/s/${DEPLOYMENT_ID}/exec`;
 
 let DB = { categories: [], items: [], media: [] };
@@ -27,12 +28,12 @@ async function refresh() {
 }
 
 function updateStats() {
-    const statsEl = document.getElementById("stats");
-    if (!statsEl) return;
-    const catCount = (DB.categories || []).length;
-    const itemCount = (DB.items || []).length;
-    const mediaCount = (DB.media || []).length;
-    statsEl.innerText = `${catCount} Categories | ${itemCount} Items | ${mediaCount} Media`;
+  const statsEl = document.getElementById("stats");
+  if (!statsEl) return;
+  const catCount = (DB.categories || []).length;
+  const itemCount = (DB.items || []).length;
+  const mediaCount = (DB.media || []).length;
+  statsEl.innerText = `${catCount} Categories | ${itemCount} Items | ${mediaCount} Media`;
 }
 
 function renderCategories() {
@@ -55,29 +56,29 @@ function renderCategories() {
   // Handle Unassigned Items (items with no valid category assigned)
   const allCategoryIds = (DB.categories || []).map(c => String(c.id));
   const unassignedItems = (DB.items || []).filter(item => {
-      if (!item.categoryIds) return true;
-      const cats = String(item.categoryIds).split(',').filter(id => id && allCategoryIds.includes(String(id)));
-      return cats.length === 0;
+    if (!item.categoryIds) return true;
+    const cats = String(item.categoryIds).split(',').filter(id => id && allCategoryIds.includes(String(id)));
+    return cats.length === 0;
   });
 
   if (unassignedItems.length > 0) {
-      const orphanSection = document.createElement("div");
-      orphanSection.style.marginTop = "32px";
-      orphanSection.innerHTML = `<h4 style="color: #ef4444; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+    const orphanSection = document.createElement("div");
+    orphanSection.style.marginTop = "32px";
+    orphanSection.innerHTML = `<h4 style="color: #ef4444; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
         <span class="icon">⚠️</span> Unassigned Items
       </h4>`;
 
-      const orphanContainer = document.createElement("div");
-      orphanContainer.className = "child-container orphan-container";
-      unassignedItems.forEach(item => orphanContainer.appendChild(buildItemNode(item)));
-      orphanSection.appendChild(orphanContainer);
-      container.appendChild(orphanSection);
+    const orphanContainer = document.createElement("div");
+    orphanContainer.className = "child-container orphan-container";
+    unassignedItems.forEach(item => orphanContainer.appendChild(buildItemNode(item)));
+    orphanSection.appendChild(orphanContainer);
+    container.appendChild(orphanSection);
 
-      new Sortable(orphanContainer, {
-        animation: 150,
-        handle: ".drag-handle",
-        onEnd: () => updateOrder("Items", orphanContainer)
-      });
+    new Sortable(orphanContainer, {
+      animation: 150,
+      handle: ".drag-handle",
+      onEnd: () => updateOrder("Items", orphanContainer)
+    });
   }
 
   new Sortable(container, {
@@ -134,16 +135,16 @@ function buildNode(cat) {
     animation: 150,
     handle: ".drag-handle",
     onEnd: (evt) => {
-        const container = evt.to;
-        const catIds = Array.from(container.children)
-            .filter(el => el.dataset.type === 'category')
-            .map(el => el.dataset.id);
-        const itemIds = Array.from(container.children)
-            .filter(el => el.dataset.type === 'item')
-            .map(el => el.dataset.id);
+      const container = evt.to;
+      const catIds = Array.from(container.children)
+        .filter(el => el.dataset.type === 'category')
+        .map(el => el.dataset.id);
+      const itemIds = Array.from(container.children)
+        .filter(el => el.dataset.type === 'item')
+        .map(el => el.dataset.id);
 
-        if (catIds.length > 1) updateOrder("Categories", catIds);
-        if (itemIds.length > 1) updateOrder("Items", itemIds);
+      if (catIds.length > 1) updateOrder("Categories", catIds);
+      if (itemIds.length > 1) updateOrder("Items", itemIds);
     }
   });
 
@@ -188,27 +189,27 @@ function renderItems() {
   const allCards = document.querySelectorAll(".card");
 
   allCards.forEach(card => {
-      if (!query) {
-          card.style.display = "";
-          card.style.opacity = "";
-          return;
-      }
+    if (!query) {
+      card.style.display = "";
+      card.style.opacity = "";
+      return;
+    }
 
-      const text = card.innerText.toLowerCase();
-      if (text.includes(query)) {
-          card.style.display = "";
-          card.style.opacity = "1";
-          // Ensure parents are visible
-          let parent = card.parentElement.closest(".card");
-          while (parent) {
-              parent.style.display = "";
-              parent.style.opacity = "1";
-              parent = parent.parentElement.closest(".card");
-          }
-      } else {
-          card.style.opacity = "0.3";
-          // We don't hide it completely to maintain tree structure but dim it
+    const text = card.innerText.toLowerCase();
+    if (text.includes(query)) {
+      card.style.display = "";
+      card.style.opacity = "1";
+      // Ensure parents are visible
+      let parent = card.parentElement.closest(".card");
+      while (parent) {
+        parent.style.display = "";
+        parent.style.opacity = "1";
+        parent = parent.parentElement.closest(".card");
       }
+    } else {
+      card.style.opacity = "0.3";
+      // We don't hide it completely to maintain tree structure but dim it
+    }
   });
 }
 
@@ -464,8 +465,8 @@ async function submitMedia(itemId) {
     active: true
   };
   if (!payload.label || !payload.url) {
-      showToast("Label and URL are required", "error");
-      return;
+    showToast("Label and URL are required", "error");
+    return;
   }
   await save("saveMedia", payload);
   manageMedia(itemId);
